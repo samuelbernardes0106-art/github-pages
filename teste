@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Palpites do Futebol!</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #f3f3f3; margin:0; padding:0; }
+  header { background: #1a237e; color:white; text-align:center; padding:20px 0; font-size:26px; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.3);}
+  main { max-width:700px; margin:20px auto; padding:10px;}
+  .game { background:white; border-radius:10px; padding:15px; display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; box-shadow:0 2px 8px rgba(0,0,0,0.1);}
+  .team { text-align:center; width:35%;}
+  .team img { width:60px; height:60px;}
+  .vs { text-align:center; width:30%;}
+  select { font-size:16px; padding:6px; border-radius:6px;}
+  button { background:#1a237e; color:white; border:none; border-radius:6px; padding:8px 15px; cursor:pointer; transition:0.3s;}
+  button:hover { background:#303f9f;}
+  .ranking { background:white; border-radius:10px; padding:15px; box-shadow:0 2px 8px rgba(0,0,0,0.1); margin-top:30px;}
+  .ranking h2 { text-align:center; margin-top:0;}
+  table { width:100%; border-collapse:collapse;}
+  th, td { text-align:left; padding:8px; border-bottom:1px solid #ddd;}
+  #login { text-align:center; margin:20px 0;}
+  input { padding:6px; border-radius:6px; border:1px solid #ccc; font-size:16px;}
+</style>
+</head>
+<body>
+<header>⚽ Palpites do Futebol!</header>
+<main>
+  <div id="login">
+    <p>Digite seu nome para começar:</p>
+    <input type="text" id="nomeJogador" placeholder="Seu nome">
+    <button onclick="entrar()">Entrar</button>
+  </div>
+
+  <div id="app" style="display:none;">
+    <h3 id="boasVindas"></h3>
+    <div id="games"></div>
+
+    <div class="ranking">
+      <h2>🏆 Ranking</h2>
+      <table id="tabelaRanking">
+        <tr><th>Jogador</th><th>Acertos</th><th>Patente</th></tr>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script>
+let jogador = null;
+const API_KEY = "SUA_CHAVE_API_FOOTBALL";
+const API_URL = "https://v3.football.api-sports.io/fixtures?league=xx&season=2025&next=5"; // substitua xx por liga id
+
+async function carregarJogosAPI() {
+  const response = await fetch(API_URL, {
+    headers: { "x-apisports-key": API_KEY }
+  });
+  const data = await response.json();
+  // filtrando só jogos futuros
+  const jogosFuturos = data.response.filter(j => new Date(j.fixture.date) > new Date());
+  return jogosFuturos.map(j => ({
+    timeA: j.teams.home.name,
+    logoA: j.teams.home.logo,
+    timeB: j.teams.away.name,
+    logoB: j.teams.away.logo,
+    data: j.fixture.date,
+    resultado: j.score.fulltime ? (j.score.fulltime.home > j.score.fulltime.away ? j.teams.home.name : j.score.fulltime.home < j.score.fulltime.away ? j.teams.away.name : "Empate") : null
+  }));
+}
+
+async function carregarJogos() {
+  const container = document.getElementById("games");
+  container.innerHTML = "";
+  const jogos = await carregarJogosAPI();
+  jogos.forEach((jogo, i) => {
+    const div = document.createElement("div");
+    div.classList.add("game");
+    const agora = new Date();
+    const inicioJogo = new Date(jogo.data);
+    const permitido = agora < inicioJogo;
+    div.innerHTML = `
+      <div class="team">
+        <img src="${jogo.logoA}" alt="${jogo.timeA}">
+        <p>${jogo.timeA}</p>
+      </div>
+      <div class="vs">
+        <p>${inicioJogo.toLocaleString()}</p>
+        <select id="palpite${i}" ${!permitido ? "disabled" : ""}>
+          <option value="">Escolher...</option>
+          <option value="${jogo.timeA}">${jogo.timeA}</option>
+          <option value="Empate">Empate</option>
+          <option value="${jogo.timeB}">${jogo.timeB}</option>
+        </select><br><br>
+        <button onclick="enviarPalpite(${i})" ${!permitido ? "disabled" : ""}>Enviar</button>
+      </div>
+      <div class="team">
+        <img src="${jogo.logoB}" alt="${jogo.timeB}">
+        <p>${jogo.timeB}</p>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function enviarPalpite(i) {
+  const select = document.getElementById(`palpite${i}`);
+  const escolha = select.value;
+  if (!escolha) return alert("Escolha um palpite!");
+  
+  // só atualiza ranking se resultado já saiu
+  alert("O resultado será computado após o jogo terminar.");
+  const ranking = JSON.parse(localStorage.getItem("ranking")) || {};
+  ranking[jogador] = ranking[jogador] || 0;
+  localStorage.setItem("ranking", JSON.stringify(ranking));
+  atualizarRanking();
+}
+
+function atualizarRanking() {
+  const tabela = document.getElementById("tabelaRanking");
+  const ranking = JSON.parse(localStorage.getItem("ranking")) || {};
+  tabela.innerHTML = "<tr><th>Jogador</th><th>Acertos</th><th>Patente</th></tr>";
+  const jogadores = Object.entries(ranking).sort((a,b)=>b[1]-a[1]);
+  jogadores.forEach(([nome, acertos])=>{
+    let patente = "Iniciante";
+    if(acertos>=10) patente="🔥 Lenda";
+    else if(acertos>=5) patente="⭐ Pro";
+    else if(acertos>=3) patente="🥈 Intermediário";
+    else if(acertos>=1) patente="🥉 Amador";
+    const linha = document.createElement("tr");
+    linha.innerHTML = `<td>${nome}</td><td>${acertos}</td><td>${patente}</td>`;
+    tabela.appendChild(linha);
+  });
+}
+
+function entrar() {
+  const nome = document.getElementById("nomeJogador").value.trim();
+  if(!nome) return alert("Digite seu nome!");
+  jogador = nome;
+  localStorage.setItem("jogadorAtual", jogador);
+  document.getElementById("login").style.display="none";
+  document.getElementById("app").style.display="block";
+  document.getElementById("boasVindas").innerText=`Bem-vindo, ${jogador}!`;
+  carregarJogos();
+  atualizarRanking();
+}
+
+// login automático
+window.onload = ()=>{
+  const nomeSalvo = localStorage.getItem("jogadorAtual");
+  if(nomeSalvo){
+    jogador=nomeSalvo;
+    document.getElementById("login").style.display="none";
+    document.getElementById("app").style.display="block";
+    document.getElementById("boasVindas").innerText=`Bem-vindo de volta, ${jogador}!`;
+    carregarJogos();
+    atualizarRanking();
+  }
+  // atualiza resultados a cada minuto
+  setInterval(carregarJogos,60000);
+};
+</script>
+</body>
+</html>
